@@ -1,81 +1,72 @@
 import cadquery as cq
-from cq_gears import SpurGear, RingGear, PlanetaryGearset, HerringbonePlanetaryGearset
 from cadquery import exporters
+import teardrop  # Adds the teardrop function to cadquery.Workplane
 
 # em milímetros
 comprimento_braco = 120
 largura_braco = 16
 altura_braco = 8
+profundidade_acoplamento = 4.5
 
-raio_bases = 14
+raio_base_acoplamento = 12.5
+raio_base_motor = 15
 
-dist_roda = 20
+
 raio_roda = 12
-altura_suporte_roda = 40 - raio_roda + altura_braco
-largura_suporte_roda = 10
+largura_roda = 6
+eixo_roda = 7
+raio_eixo_roda = 1
+raio_furo_eixo = raio_eixo_roda + 0.1
 
-raio_arrendondamentos = 0.5
+altura_motor = 40
+
+
+dist_suporte_roda = 20
+raio_menor_suporte_roda = 6
+altura_suporte_roda = altura_motor - raio_roda + altura_braco
+largura_suporte_roda = 8
+
+raio_arrendondamentos = 1.2
 
 w = cq.Workplane('XY').box(comprimento_braco,
                            largura_braco,
                            altura_braco,
                            (False, True, False))
 
-w = w.moveTo(0, 0).circle(raio_bases).extrude(altura_braco)
-
 #w = w.edges('|X').fillet(1)
-w = w.moveTo(comprimento_braco, 0).circle(raio_bases).extrude(altura_braco)
-
+wc = cq.Workplane('XY').moveTo(comprimento_braco, 0).circle(raio_base_motor).extrude(altura_braco, combine=False)
+wc = wc.edges().fillet(raio_arrendondamentos)
 w = w.edges('|X').fillet(raio_arrendondamentos)
+w = w.union(wc).clean()
 
-w = w.moveTo(comprimento_braco - dist_roda, 0).box(largura_suporte_roda, largura_braco, altura_suporte_roda, (True, True, False))
-
-w = w.edges('|X').fillet(raio_arrendondamentos)
-w = w.edges('|Z').fillet(raio_arrendondamentos)
+altura_ate_furo_roda = altura_braco - profundidade_acoplamento + altura_motor - raio_roda / 2
+w_roda = cq.Workplane('YZ', (comprimento_braco - dist_suporte_roda + largura_suporte_roda / 2 + largura_roda / 2 + eixo_roda / 7, 0, altura_ate_furo_roda)).circle(raio_roda).extrude(largura_roda / 2, both=True).edges().fillet(1.0).circle(raio_eixo_roda).extrude(-eixo_roda - largura_roda/2)
+#w = w.moveTo(comprimento_braco - dist_suporte_roda, 0).box(largura_suporte_roda, largura_braco, altura_suporte_roda, (True, True, False))
+h_max = altura_ate_furo_roda + raio_menor_suporte_roda
+pts = [
+    (-largura_braco / 2, 0),
+    (largura_braco / 2, 0),
+    (largura_braco / 2, h_max - largura_braco / 2),
+    (0, h_max),
+    (-largura_braco / 2, h_max - largura_braco / 2),
+    (-largura_braco / 2, 0)
+]
+w_sup = cq.Workplane('YZ', (comprimento_braco - dist_suporte_roda, 0, 0)).polyline(pts).close().extrude(largura_suporte_roda / 2, both=True).edges('(not >Z) and |X').fillet(raio_arrendondamentos).edges('>Z').fillet(raio_menor_suporte_roda).faces('|X').edges().fillet(raio_arrendondamentos)
+w_sup = w_sup.moveTo(0, altura_ate_furo_roda).teardrop(raio_furo_eixo).cutThruAll()
+#w = w.edges('|X').fillet(raio_arrendondamentos)
+#w = w.edges('|Z').fillet(raio_arrendondamentos)
+#w = w.edges('|Y').fillet(raio_arrendondamentos)
+w = w.union(w_sup).clean()
 w = w.edges('|Y').fillet(raio_arrendondamentos)
 
+from testes_acoplamento import acoplamento
+obj_acoplamento = acoplamento(profundidade_acoplamento, altura_braco, raio_base_acoplamento, raio_arrendondamentos)
+neg = cq.Workplane('XY').circle(obj_acoplamento[1] - raio_arrendondamentos).extrude(altura_braco)
+w = w.moveTo(0, 0).cut(neg).union(obj_acoplamento[0])
+
+
 show_object(w)
+show_object(w_roda)
 
-# Create a gear object with the SpurGear class
-#spur_gear = SpurGear(module=0.816, teeth_number=20, width=5.0, bore_d=2.5)
-
-#right_spur_gear = SpurGear(module=0.8, teeth_number=20, width=5.0, bore_d=2.5)
-
-# Build this gear using the gear function from cq.Workplane
-# wp = cq.Workplane('XY').gear(spur_gear)
-
-#straight_ring = RingGear(module=0.8, teeth_number=20, width=5.0, rim_width=2.5, clearance=0.1, backlash=-0.8)
-
-#wp = cq.Workplane('XY').gear(straight_ring)
-
-#wp2 = cq.Workplane('XY').gear(spur_gear)
-
-#wp3 = wp.cut(wp2.findSolid())
-
-#wp4 = cq.Workplane('XY').gear(right_spur_gear)
-
-#exporters.export(wp3, 'teste_acoplamento.stl')
-
-#wp5 = cq.Workplane('XY').circle(7).extrude(5)
-
-#wp6 = cq.Workplane('XY').circle(8.8).extrude(5)
-
-#gear = SpurGear(module=0.80, teeth_number=20, width=7.0, bore_d=2.5)
-
-#wp7 = cq.Workplane('XY').gear(gear)
-
-
-#gearset = PlanetaryGearset(module=1.0,
-                           #sun_teeth_number=12, planet_teeth_number=18,
-                           #width=10.0, rim_width=3.0, n_planets=3,
-                           #bore_d=6.0)
-
-#gearset = HerringbonePlanetaryGearset(module=1.0,
-                                      #sun_teeth_number=18,
-                                      #planet_teeth_number=18,
-                                      #width=10.0, rim_width=3.0, n_planets=4,
-                                      #helix_angle=30.0,
-                            # Set backlash and clearance for 3d-prinatability
-                                      #backlash=0.3, clearance=0.2, bore_d=6.0)
-
-#wp = cq.Workplane('XY').gear(gearset)
+if True:
+    exporters.export(w, 'braco_1.stl')
