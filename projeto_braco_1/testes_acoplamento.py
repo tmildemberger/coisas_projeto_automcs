@@ -42,4 +42,5 @@ def acoplamento(profundidade=3.2, altura_total=4.8, raio_total=6.24, arredondame
 if __name__ == "temp":
     obj = acoplamento()
     show_object(obj[0])
+    exporters.export(obj[0], 'teste_acoplamento_v50.stl')
     
