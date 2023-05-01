@@ -25,8 +25,15 @@ dist_suporte_roda = 20
 raio_menor_suporte_roda = 6
 altura_suporte_roda = altura_motor - raio_roda + altura_braco
 largura_suporte_roda = 8
+outra_largura_suporte_roda = 10
 
-raio_arrendondamentos = 1.2
+raio_arrendondamentos = 1.6
+
+motor_2_raio = 14
+motor_2_altura = 18
+motor_2_dist_furo = 3.5
+motor_2_raio_furo = 2
+motor_2_raio_suporte = 3.5
 
 w = cq.Workplane('XY').box(comprimento_braco,
                            largura_braco,
@@ -44,12 +51,12 @@ w_roda = cq.Workplane('YZ', (comprimento_braco - dist_suporte_roda + largura_sup
 #w = w.moveTo(comprimento_braco - dist_suporte_roda, 0).box(largura_suporte_roda, largura_braco, altura_suporte_roda, (True, True, False))
 h_max = altura_ate_furo_roda + raio_menor_suporte_roda
 pts = [
-    (-largura_braco / 2, 0),
-    (largura_braco / 2, 0),
-    (largura_braco / 2, h_max - largura_braco / 2),
+    (-outra_largura_suporte_roda / 2, 0),
+    (outra_largura_suporte_roda / 2, 0),
+    (outra_largura_suporte_roda / 2, h_max - outra_largura_suporte_roda / 2),
     (0, h_max),
-    (-largura_braco / 2, h_max - largura_braco / 2),
-    (-largura_braco / 2, 0)
+    (-outra_largura_suporte_roda / 2, h_max - outra_largura_suporte_roda / 2),
+    (-outra_largura_suporte_roda / 2, 0)
 ]
 w_sup = cq.Workplane('YZ', (comprimento_braco - dist_suporte_roda, 0, 0)).polyline(pts).close().extrude(largura_suporte_roda / 2, both=True).edges('(not >Z) and |X').fillet(raio_arrendondamentos).edges('>Z').fillet(raio_menor_suporte_roda).faces('|X').edges().fillet(raio_arrendondamentos)
 w_sup = w_sup.moveTo(0, altura_ate_furo_roda).teardrop(raio_furo_eixo).cutThruAll()
@@ -59,14 +66,18 @@ w_sup = w_sup.moveTo(0, altura_ate_furo_roda).teardrop(raio_furo_eixo).cutThruAl
 w = w.union(w_sup).clean()
 w = w.edges('|Y').fillet(raio_arrendondamentos)
 
+#w_motor = cq.Workplane('XY').circle(motor_2_raio).extrude(motor_2_altura)#.transformed((0.0, 0.0, 0.0), (0.0, 0.0, motor_2_altura))
+#w_motor = w_motor.moveTo(-motor_2_raio_suporte, 0).lineTo(-motor_2_raio_suporte, motor_2_raio + motor_2_dist_furo).threePointArc((0, motor_2_raio + motor_2_dist_furo + motor_2_raio_suporte), (motor_2_raio_suporte, motor_2_raio + motor_2_dist_furo))#.lineTo(motor_2_raio_suporte, motor_2_dist_furo)#.close()#.circle(motor_2_raio_furo).mirrorX().extrude(-1.0)
+w_motor = cq.Workplane("front").lineTo(2.0, 0).lineTo(2.0, 1.0).threePointArc((1.0, 1.5), (0.0, 1.0))
 from testes_acoplamento import acoplamento
 obj_acoplamento = acoplamento(profundidade_acoplamento, altura_braco, raio_base_acoplamento, raio_arrendondamentos)
 neg = cq.Workplane('XY').circle(obj_acoplamento[1] - raio_arrendondamentos).extrude(altura_braco)
 w = w.moveTo(0, 0).cut(neg).union(obj_acoplamento[0])
 
 
-show_object(w)
-show_object(w_roda)
+show_object(w_motor)
+#show_object(w)
+#show_object(w_roda)
 
 if True:
     exporters.export(w, 'braco_1.stl')
