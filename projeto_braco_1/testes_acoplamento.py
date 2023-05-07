@@ -2,20 +2,20 @@ import cadquery as cq
 from cq_gears import SpurGear, RingGear, PlanetaryGearset, HerringbonePlanetaryGearset
 from cadquery import exporters
 
-SpurGear.ka = 1.25
-RingGear.ka = 1.25
+SpurGear.ka = 1.21
+RingGear.ka = 1.21
 
 def acoplamento(profundidade=3.2, altura_total=4.8, raio_total=6.24, arredondamento=0.75):
     ang = 20.0
 
     # engrenagem levemente maior para cortar pedacinho do anel exterior
-    spur_gear = SpurGear(module=0.828 / 2, teeth_number=20, width=profundidade, bore_d=2.5, pressure_angle=ang+4)
+    spur_gear = SpurGear(module=0.800 / 2, teeth_number=20, width=profundidade, bore_d=2.5, pressure_angle=ang+4)
     
     # engrenagem que mais se aproxima da real
     right_spur_gear = SpurGear(module=0.8 / 2, teeth_number=20, width=profundidade, bore_d=2.5, pressure_angle=ang)
     
     # anel exterior para acoplar na engrenagem do motor
-    straight_ring = RingGear(module=0.8 / 2, teeth_number=20, width=profundidade, rim_width=raio_total - 4.74, pressure_angle=ang, clearance=0.24, backlash=-1.8)
+    straight_ring = RingGear(module=0.8 / 2, teeth_number=20, width=profundidade, rim_width=raio_total - 4.74, pressure_angle=ang, clearance=0.16, backlash=-1.4)
     
     wp = cq.Workplane('XY').gear(straight_ring)
     
@@ -27,6 +27,9 @@ def acoplamento(profundidade=3.2, altura_total=4.8, raio_total=6.24, arredondame
     wp3 = wp3.faces('<Z').edges().fillet(arredondamento)
     wp3 = wp3.edges('%circle and >Z').fillet(arredondamento)
     wp3 = wp3.translate((0, 0, altura_total - profundidade))
+    
+    #show_object(wp)
+    #show_object(wp2)
     
     return (wp3, straight_ring.rim_r)
     #wp4 = cq.Workplane('XY').gear(right_spur_gear)
@@ -40,7 +43,7 @@ def acoplamento(profundidade=3.2, altura_total=4.8, raio_total=6.24, arredondame
     
 #raise Exception(f"{__name__}")
 if __name__ == "temp":
-    obj = acoplamento()
+    obj = acoplamento(4.8, 5.6, 5.8, 0.25)
     show_object(obj[0])
-    exporters.export(obj[0], 'teste_acoplamento_v50.stl')
+    exporters.export(obj[0], 'teste_acoplamento_v250.stl')
     
