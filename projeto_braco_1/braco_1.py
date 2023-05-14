@@ -1,7 +1,7 @@
 import cadquery as cq
 import math
 from cadquery import exporters
-from motor_2 import motor_2
+from motor_2 import motor_2, motor_2_dim
 import teardrop  # Adds the teardrop function to cadquery.Workplane
 
 # em milímetros
@@ -98,11 +98,62 @@ r = 7
 dist = [(p + r*math.cos(i), r*math.sin(i)) for i in [0, math.pi*2/3, math.pi*4/3]]
 w = w.transformed((0, 180, 0), (0, 0, altura_braco)).pushPoints(dist).eachpoint(lambda f: w_furo.findSolid().moved(f), combine='cut')
 
+w_pino = w_furo.cut(w_furo.shell(-0.04)).translate((0, 0, -0.04))
+
 #w_motor = w_motor.translate((0.0, 0.0, 2.0))
 #w = w.cut(w_motor).clean()
+tol = 0.12
+m2 = motor_2_dim()
+ra = m2.raio + m2.dist_furo + m2.raio_suporte + 1
+w_obj = cq.Workplane('XY', origin=(comprimento_braco, 0, 2*altura_braco+tol)).circle(ra).extrude(-altura_braco-tol-altura_braco-m2.altura)#.translate((0.0, 0.0, altura_braco + 5))
+w_obj = w_obj.intersect(cq.Workplane('XY', origin=(comprimento_braco, 0, 0)).box(4*m2.raio_suporte, 2*ra+4, 100)).clean()
+w_temp = cq.Workplane('XY', origin=(comprimento_braco, 0, altura_braco + tol)).circle(raio_base_motor+tol/2).extrude(-altura_braco-2*tol-raio_arrendondamentos/2-altura_furos).edges().fillet(raio_arrendondamentos-tol)
+#w_temp = w_temp.union(w_temp.shell(tol/2))
+w_obj = w_obj.cut(w_temp)
+w_temp = cq.Workplane('XY', origin=(comprimento_braco, 0, tol)).circle(m2.raio+tol/2).extrude(-m2.altura-2*tol).edges('>Z').fillet(raio_arrendondamentos-tol)
+#w_temp = w_temp.union(w_temp.shell(tol/2))
+w_obj = w_obj.cut(w_temp)
 
-#ra = motor_2_raio + motor_2_dist_furo + motor_2_raio_suporte
-#w_obj = cq.Workplane('XY').moveTo(comprimento_braco, 0.0).circle(ra).extrude(-motor_2_altura - altura_braco - 5).translate((0.0, 0.0, altura_braco + 5))
+w_temp = cq.Workplane('XY', origin=(comprimento_braco, 0, altura_braco -altura_furos + tol-altura_braco-2*tol-raio_arrendondamentos/2)).box(4*ra, 2*(raio_base_motor+tol/2), -(-altura_braco-2*tol-raio_arrendondamentos/2), (False, True, False)).edges('|X').fillet(raio_arrendondamentos-tol)
+w_obj = w_obj.cut(w_temp)
+
+from cq_warehouse.fastener import RaisedCheeseHeadScrew
+import cq_warehouse.extensions
+parafuso = RaisedCheeseHeadScrew(size="M3-1", fastener_type="iso7045",length=12.0, simple=False)
+
+
+hmm = cq.Assembly(None, name="hmm")
+w_obj = w_obj.faces('<Z').workplane()
+w_obj.plane.origin = (comprimento_braco, 0.0, -m2.altura-2.4)
+w_obj = w_obj.pushPoints([(0.0, m2.raio + m2.dist_furo), (0.0, -m2.raio - m2.dist_furo)]).threadedHole(fastener=parafuso, depth=12.0, baseAssembly=hmm)
+w_obj.plane.origin = (comprimento_braco, 0.0, -m2.altura)
+#w_a = w_obj.pushPoints([(0.0, m2.raio + m2.dist_furo), (0.0, -m2.raio - m2.dist_furo)]).circle(2).extrude(-16)
+#w_a = w_a.cut(w_obj)
+#show_object(w_a)#.union(w_a.shell(0.08)))
+
+w_temp = cq.Workplane('XY').moveTo(-m2.raio_suporte, 0).lineTo(-m2.raio_suporte, m2.raio + m2.dist_furo).threePointArc((0, m2.raio + m2.dist_furo + m2.raio_suporte), (m2.raio_suporte, m2.raio + m2.dist_furo)).lineTo(m2.raio_suporte, 0).close().mirrorX().extrude(-m2.altura_aba).translate((comprimento_braco, 0, -m2.altura+m2.altura_aba))
+w_temp = w_temp.union(w_temp.shell(tol/2))
+w_obj = w_obj.cut(w_temp)
+
+pinos = [(r*math.cos(i), r*math.sin(i)) for i in [math.pi*2/3, math.pi*4/3]]
+w_obj = w_obj.faces('>Z[-2]').workplane().pushPoints(pinos).eachpoint(lambda f: w_pino.findSolid().moved(f), combine='a')
+
+largura_abertura = 6
+altura_abertura = 2.4
+raio_menor_abertura = 0.3
+raio_maior_abertura = 0.8
+w_abertura = (cq.Workplane('YZ').moveTo(-largura_abertura / 2, 0)
+              .radiusArc((-largura_abertura / 2 +raio_menor_abertura, raio_menor_abertura), -raio_menor_abertura)
+              .lineTo(-largura_abertura / 2 +raio_menor_abertura, altura_abertura-raio_maior_abertura)
+              .radiusArc((-largura_abertura / 2 +raio_menor_abertura+raio_maior_abertura, altura_abertura), raio_maior_abertura)
+              .lineTo(largura_abertura/2-raio_menor_abertura-raio_maior_abertura, altura_abertura)
+              .radiusArc((largura_abertura/2-raio_menor_abertura, altura_abertura-raio_maior_abertura), raio_maior_abertura)
+              .lineTo(largura_abertura/2-raio_menor_abertura, raio_menor_abertura)
+              .radiusArc((largura_abertura/2, 0), -raio_maior_abertura).close()
+              .extrude(3*m2.raio_suporte, both=True)).translate((comprimento_braco, 0, altura_braco+tol))
+#show_object(w_abertura)
+
+w_obj = w_obj.cut(w_abertura).clean()
 #w_temp = cq.Workplane('XY').moveTo(comprimento_braco, 0.0).rect(2*motor_2_raio_suporte, 2*ra + 4, True).extrude(-motor_2_altura - altura_braco - 5).translate((0.0, 0.0, altura_braco + 5))
 #w_obj = w_obj.intersect(w_temp).clean().cut(w_motor).clean().cut(w_motor.shell(0.4)).clean()#.cut(w).clean().cut(w.shell(0.4)).clean()
 #w_temp = cq.Workplane('XY').moveTo(comprimento_braco, 0.0).circle(raio_base_motor + 0.4).extrude(-altura_braco - 55).faces().fillet(1.0).translate((0.0, 0.0, altura_braco))
@@ -113,12 +164,16 @@ w = w.transformed((0, 180, 0), (0, 0, altura_braco)).pushPoints(dist).eachpoint(
 
 #show_object(w_motor)
 show_object(w)
-show_object(w_roda)
+#show_object(w_roda)
 #show_object(w_temp)
 #show_object(w_subtemp)
-#show_object(w_obj)
+show_object(w_obj.translate((-8, 0, altura_furos)))
 show_object(w_motor)
+#show_object(w_furo)
+#show_object(w_pino)
 
 if False:
     exporters.export(w, 'braco_1.stl')
     #exporters.export(w_obj, 'coisa.stl')
+if True:
+    exporters.export(w_obj, 'novo_prendedor.stl')
