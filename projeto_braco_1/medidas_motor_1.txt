@@ -1,0 +1,5 @@
+diam => 41.9
+altura => 19.55, 18.9
+acop =>10mm, 0.8, 5.3 (4.5 de nada)
+raio_arre = 4
+coisa -> 3mm altura, 13.5 largura, 5; durante 12 mm com fio embaixo, 4.3 de altura, raio 27.7

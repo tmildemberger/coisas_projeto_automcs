@@ -175,5 +175,5 @@ show_object(w_motor)
 if False:
     exporters.export(w, 'braco_1.stl')
     #exporters.export(w_obj, 'coisa.stl')
-if True:
+if False:
     exporters.export(w_obj, 'novo_prendedor.stl')
