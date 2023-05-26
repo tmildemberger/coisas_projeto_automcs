@@ -27,42 +27,26 @@ struct Solucao {
 #define A2 (156.25f)
 #define A22 (312.5f)
 
+float entre_180_e_180(float f) {
+  while (f > 180.0f) {
+    f -= 360.0f;
+  }
+  while (f < -180.0f) {
+    f += 360.0f;
+  }
+  return f;
+}
+
 Solucoes duas_solucoes(float x, float y) {
   float alpha1 = 180.f*atan2f(y, x)/M_PI;
   float alpha2 = 180.f*acosf( sqrtf(x*x+y*y) / (2*A) )/M_PI;
   float alpha3 = 180.f*acosf( (A22 - x*x - y*y) / (A22) )/M_PI;
-  Solucoes ret = {
-    alpha1 + alpha2,
-    alpha3 - 180,
-    alpha1 - alpha2,
-    -alpha3 + 180
+  return {
+    entre_180_e_180(alpha1 + alpha2),
+    entre_180_e_180(alpha3 - 180),
+    entre_180_e_180(alpha1 - alpha2),
+    entre_180_e_180(-alpha3 + 180)
   };
-  while (ret.theta1_sol1 > 180.0f) {
-    ret.theta1_sol1 -= 360.0f;
-  }
-  while (ret.theta2_sol1 > 180.0f) {
-    ret.theta2_sol1 -= 360.0f;
-  }
-  while (ret.theta1_sol2 > 180.0f) {
-    ret.theta1_sol2 -= 360.0f;
-  }
-  while (ret.theta2_sol2 > 180.0f) {
-    ret.theta2_sol2 -= 360.0f;
-  }
-
-  while (ret.theta1_sol1 < -180.0f) {
-    ret.theta1_sol1 += 360.0f;
-  }
-  while (ret.theta2_sol1 < -180.0f) {
-    ret.theta2_sol1 += 360.0f;
-  }
-  while (ret.theta1_sol2 < -180.0f) {
-    ret.theta1_sol2 += 360.0f;
-  }
-  while (ret.theta2_sol2 < -180.0f) {
-    ret.theta2_sol2 += 360.0f;
-  }
-  return ret;
 }
 
 const float CASA = 3.0f;
