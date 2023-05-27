@@ -10,7 +10,7 @@ profundidade_acoplamento = 7.2
 profundidade_base_acoplamento = 2.8
 
 # em milímetros
-comprimento_braco = 130 - raio_arredondamentos
+comprimento_braco = 95 - raio_arredondamentos
 largura_braco = 12 - 2 * raio_arredondamentos
 altura_braco = profundidade_acoplamento + profundidade_base_acoplamento - 2 * raio_arredondamentos
 
