@@ -1,0 +1,173 @@
+.program stepper_step
+
+.origin 0
+
+; usa mesma sequência que o arduino Stepper.h
+
+; para frente (dir = 1)
+.wrap_target
+    irq wait 3
+    set pins, 0b1010
+    irq wait 3
+    set pins, 0b0110
+    irq wait 3
+    set pins, 0b0101
+    irq wait 3
+    set pins, 0b1001
+.wrap
+
+; para trás (dir = 0)
+tras:
+    irq wait 3
+    set pins, 0b1010
+    irq wait 3
+    set pins, 0b1001
+    irq wait 3
+    set pins, 0b0101
+    irq wait 3
+    set pins, 0b0110
+    jmp tras
+
+% c-sdk {
+
+static inline pio_sm_config stepper_step_program_get_config_dir_1(uint offset, uint pin) {
+    pio_sm_config c = pio_get_default_sm_config();
+    sm_config_set_wrap(&c, offset + 0, offset + 7);
+    
+    // grupo de pinos "set" mapeado para 4 pinos a partir de 'pin'
+    sm_config_set_set_pins(&c, pin, 4);
+    return c;
+}
+
+static inline pio_sm_config stepper_step_program_get_config_dir_0(uint offset, uint pin) {
+    pio_sm_config c = pio_get_default_sm_config();
+    sm_config_set_wrap(&c, offset + 8, offset + 15);
+    
+    // grupo de pinos "set" mapeado para 4 pinos a partir de 'pin'
+    sm_config_set_set_pins(&c, pin, 4);
+    return c;
+}
+
+static inline void stepper_step_program_preinit(PIO pio, uint sm, uint offset, uint pin) {
+    // seleciona função PIO para os pinos
+    pio_gpio_init(pio, pin);
+    pio_gpio_init(pio, pin+1);
+    pio_gpio_init(pio, pin+2);
+    pio_gpio_init(pio, pin+3);
+
+    // configura os pinos como saída do PIO
+    pio_sm_set_consecutive_pindirs(pio, sm, pin, 4, true);
+}
+
+static inline void stepper_step_program_init(PIO pio, uint sm, uint offset, uint pin, uint start) {
+    uint dir = (start < 8) ? 1 : 0;
+    pio_sm_config c = (dir == 0) ? stepper_step_program_get_config_dir_0(offset, pin) : stepper_step_program_get_config_dir_1(offset, pin);
+
+    // inicializa programa com a configuração criada, no endereço start
+    pio_sm_init(pio, sm, start, &c);
+
+    // configura os pinos como saída do PIO
+    pio_sm_set_consecutive_pindirs(pio, sm, pin, 4, true);
+
+    // começa execução
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+.program stepper_count
+
+.wrap_target
+    out x, 32
+
+countloop:
+    wait 1 irq 3        [31]
+    nop                 [31]
+    nop                 [31]
+    jmp x-- countloop   [28]
+    irq wait 2
+.wrap
+
+% c-sdk {
+#include "hardware/clocks.h"
+
+static inline void stepper_count_program_init(PIO pio, uint sm, uint offset) {
+    pio_sm_config c = stepper_count_program_get_default_config(offset);
+
+    // configura autopull
+    sm_config_set_out_shift(&c, true, true, 32);
+
+    // configura para 8 kHz
+    float div = clock_get_hz(clk_sys) / 8000.0f;
+    sm_config_set_clkdiv(&c, div);
+
+
+    // inicializa programa com a configuração criada
+    pio_sm_init(pio, sm, offset, &c);
+
+    // começa execução
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+.program stepper_outro
+
+.wrap_target
+    ; seta direção
+    out pins, 1
+
+    ; lê n de passos no 'y'
+    out y, 31
+
+nao_acabou:
+    set pins, 1
+    set pins, 0
+    set x, 19
+loop_x:
+    jmp x-- loop_x [31]
+    jmp y-- nao_acabou [24]
+
+    ; acabou, espera o outro motor ter acabado, e então avisa CPU
+    wait 1 irq 2
+    irq 0
+.wrap
+
+% c-sdk {
+#include "hardware/clocks.h"
+
+static inline void stepper_outro_program_init(PIO pio, uint sm, uint offset, uint step, uint dir) {
+    pio_sm_config c = stepper_outro_program_get_default_config(offset);
+    
+    // configura autopull
+    sm_config_set_out_shift(&c, true, true, 32);
+
+    // configura para 8 kHz
+    float div = clock_get_hz(clk_sys) / 8000.0f;
+    sm_config_set_clkdiv(&c, div);
+
+
+    // grupo de pinos "out" mapeado para o pino dir
+    sm_config_set_out_pins(&c, dir, 1);
+    
+    // grupo de pinos "set" mapeado para o pino step
+    sm_config_set_set_pins(&c, step, 1);
+
+    // seleciona função PIO para os pinos
+    pio_gpio_init(pio, dir);
+    pio_gpio_init(pio, step);
+
+    // configura os pinos como saída do PIO
+    pio_sm_set_consecutive_pindirs(pio, sm, dir, 1, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, step, 1, true);
+
+
+    // inicializa programa com a configuração criada
+    pio_sm_init(pio, sm, offset, &c);
+
+    // começa execução
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}
