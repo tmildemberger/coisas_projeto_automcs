@@ -5,7 +5,7 @@ from motor_2 import motor_2, motor_2_dim
 import teardrop  # Adds the teardrop function to cadquery.Workplane
 
 # em milímetros
-comprimento_braco = 120
+comprimento_braco = 81
 largura_braco = 12
 altura_braco = 10
 profundidade_acoplamento = 7.2
@@ -73,7 +73,9 @@ w_sup = (w_sup.transformed((0.0, 0.0, 0.0), (0.0, 0.0, 0.0))
 #w = w.edges('|X').fillet(raio_arrendondamentos)
 #w = w.edges('|Z').fillet(raio_arrendondamentos)
 #w = w.edges('|Y').fillet(raio_arrendondamentos)
-w = w.union(w_sup).clean()
+
+# retira suporte para roda
+#w = w.union(w_sup).clean()
 w = w.edges('|Y').fillet(raio_arrendondamentos)
 
 w_motor = motor_2((comprimento_braco, 0.0, 0.0), rotate=True, rotation_axis=((0.0, -1.0, 0.0), (0.0, 1.0, 0.0)), rotation=180)
@@ -102,7 +104,7 @@ w_pino = w_furo.cut(w_furo.shell(-0.04)).translate((0, 0, -0.04))
 
 #w_motor = w_motor.translate((0.0, 0.0, 2.0))
 #w = w.cut(w_motor).clean()
-tol = 0.12
+tol = 0.14
 m2 = motor_2_dim()
 ra = m2.raio + m2.dist_furo + m2.raio_suporte + 1
 w_obj = cq.Workplane('XY', origin=(comprimento_braco, 0, 2*altura_braco+tol)).circle(ra).extrude(-altura_braco-tol-altura_braco-m2.altura)#.translate((0.0, 0.0, altura_braco + 5))
