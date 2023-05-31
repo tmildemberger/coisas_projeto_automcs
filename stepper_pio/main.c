@@ -29,11 +29,11 @@ int main(void) {
     gpio_put(led_pin, 0);
     
     // inicializa porta serial selecionada no CMakeLists.txt
-    // stdio_init_all();
+    stdio_init_all();
 
     // sleep_ms(1000);
     
-    // printf("Começa configuração\r\n");
+    printf("Começa configuração\r\n");
 
     pio_add_program_at_offset(pio, &stepper_step_program, 0);
     sm_step = pio_claim_unused_sm(pio, true);
@@ -54,6 +54,7 @@ int main(void) {
     irq_set_exclusive_handler(PIO0_IRQ_0, chegou_int);
     irq_set_enabled(PIO0_IRQ_0, true);
 
+    printf("Fim da configuração\r\n");
     // espera ligar na tomada
     sleep_ms(8000);
 
@@ -76,17 +77,18 @@ typedef struct solucoes {
 typedef struct solucao {
     float theta1;
     float theta2;
+    float estimated_theta2_diff;
 } Solucao;
 
-#define A (12.5f)
-#define A2 (156.25f)
-#define A22 (312.5f)
+#define A (8.9f)
+#define A2 (76.21f)
+#define A22 (158.42f)
 
 float entre_180_e_180(float f) {
     while (f > 180.0f) {
         f -= 360.0f;
     }
-    while (f < -180.0f) {
+    while (f <= -180.0f) {
         f += 360.0f;
     }
     return f;
@@ -104,7 +106,7 @@ Solucoes duas_solucoes(float x, float y) {
     };
 }
 
-const float CASA = 3.0f;
+const float CASA = 2.4f;
 const int LARGURA = 12;
 const int ALTURA = 8;
 const float canto_inf_esquerdo_x = -(((float) LARGURA)*CASA/2);
@@ -134,6 +136,8 @@ float diff_angulos(float a, float b) {
     return diff;
 }
 
+const float overlap_theta2 = 5;
+
 Solucao escolhe_melhor(Solucoes sols, float theta1_atual, float theta2_atual) {
     bool nao_gosto_sol1 = sols.theta1_sol1 >= -90 - graus_evitar && sols.theta1_sol1 <= -90 + graus_evitar;
     bool nao_gosto_sol2 = sols.theta1_sol2 >= -90 - graus_evitar && sols.theta1_sol2 <= -90 + graus_evitar;
@@ -148,15 +152,38 @@ Solucao escolhe_melhor(Solucoes sols, float theta1_atual, float theta2_atual) {
         sols.theta2_sol2 = sols.theta2_sol1;
     }
 
-    if (diff_angulos(sols.theta2_sol1, theta2_atual) <= diff_angulos(sols.theta2_sol2, theta2_atual)) {
+    // para solução 1
+
+    // theta2_atual pode estar fora de (-180, 180]
+    float sol1_diff = diff_angulos(sols.theta2_sol1, entre_180_e_180(theta2_atual));
+    if (theta2_atual + sol1_diff > 270 + overlap_theta2) {
+        sol1_diff -= 360;
+    } else if (theta2_atual + sol1_diff < -90 - overlap_theta2) {
+        sol1_diff += 360;
+    }
+    
+    // fim solução 1
+    
+    // para solução 2
+    float sol2_diff = diff_angulos(sols.theta2_sol2, entre_180_e_180(theta2_atual));
+    if (theta2_atual + sol2_diff > 180 + overlap_theta2) {
+        sol2_diff -= 360;
+    } else if (theta2_atual + sol2_diff < -180 - overlap_theta2) {
+        sol2_diff += 360;
+    }
+    // fim solução 2
+
+    if (fabsf(sol1_diff) <= fabsf(sol2_diff)) {
         return (Solucao) {
-        sols.theta1_sol1,
-        sols.theta2_sol1,
+            sols.theta1_sol1,
+            sols.theta2_sol1,
+            sol1_diff,
         };
     } else {
         return (Solucao) {
-        sols.theta1_sol2,
-        sols.theta2_sol2,
+            sols.theta1_sol2,
+            sols.theta2_sol2,
+            sol2_diff,
         };
     }
 }
@@ -184,7 +211,7 @@ int posicao_motor_grande(float angulo) {
     return (int) roundf(pos);
 }
 
-int posicao_motor_pequeno(float angulo) {
+int angulo_para_passo_motor_pequeno(float angulo) {
     return (int) roundf(angulo * 2048.0f / 360.0f);
 }
 
@@ -199,7 +226,17 @@ void chegou_int(void) {
 // dir = 0 -> horário
 
 int posicao_grande_atual = 0;
-int posicao_pequeno_atual = 0;
+
+int le_posicao(void) {
+    const int size = 16;
+    char str[size];
+    int i = 0;
+    while (i < (size-1) && (str[i] = getchar()) != '\r') {
+        ++i;
+    }
+    str[i] = '\0';
+    return atoi(str);
+}
 
 void loop(void) {
     if (i >= 8) {
@@ -214,14 +251,24 @@ void loop(void) {
     
     int pos_x = posicoes[i];
     int pos_y = posicoes[i+1];
+
+
+    printf("Esperando entrada de posição:\r\n");
+    pos_x = le_posicao();
+    pos_y = le_posicao();
+    pos_x = (pos_x >= LARGURA) ? LARGURA - 1 : pos_x;
+    pos_y = (pos_y >= ALTURA) ? ALTURA - 1 : pos_y;
+    printf("Começo do movimento para (%d, %d):\r\n", pos_x, pos_y);
+
     Solucoes sols = duas_solucoes(transforma_x(pos_x), transforma_y(pos_y));
     Solucao sol = escolhe_melhor(sols, theta1, theta2);
     
+    printf("Angulos finais %f, %f; Diff %f\r\n", sol.theta1, sol.theta2, sol.estimated_theta2_diff);
+    
     int posicao_grande = posicao_motor_grande(sol.theta1);
-    int posicao_pequeno = -posicao_motor_pequeno(sol.theta2);
 
     int dist_grande = posicao_grande - posicao_grande_atual;
-    int dist_pequeno = posicao_pequeno - posicao_pequeno_atual;
+    int dist_pequeno = angulo_para_passo_motor_pequeno(sol.estimated_theta2_diff);
 
     int dir_grande = (dist_grande > 0) ? 1 : 0;
     int dir_pequeno = (dist_pequeno > 0) ? 1 : 0;
@@ -230,6 +277,8 @@ void loop(void) {
 
     // prepara para rodarem
     uint8_t pc = pio_sm_get_pc(pio, sm_step);
+    
+    printf("PC e dir: %d, %d\r\n", pc, dir_pequeno);
     if (pc < 8 && dir_pequeno == 0) {
         uint novo_pc = 0;
         // vai trocar de dir = 1 para 0
@@ -288,11 +337,12 @@ void loop(void) {
         ;
     }
 
+    printf("Movimento terminou\r\n");
+
     theta1 = sol.theta1;
-    theta2 = sol.theta2;
+    theta2 += sol.estimated_theta2_diff;
 
     posicao_grande_atual = posicao_grande;
-    posicao_pequeno_atual = posicao_pequeno;
 
     i += 2;
 

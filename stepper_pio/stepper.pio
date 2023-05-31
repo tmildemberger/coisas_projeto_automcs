@@ -2,16 +2,14 @@
 
 .origin 0
 
-; usa mesma sequência que o arduino Stepper.h
-
 ; para frente (dir = 1)
 .wrap_target
     irq wait 3
-    set pins, 0b1010
+    set pins, 0b0011
     irq wait 3
     set pins, 0b0110
     irq wait 3
-    set pins, 0b0101
+    set pins, 0b1100
     irq wait 3
     set pins, 0b1001
 .wrap
@@ -19,13 +17,13 @@
 ; para trás (dir = 0)
 tras:
     irq wait 3
-    set pins, 0b1010
-    irq wait 3
     set pins, 0b1001
     irq wait 3
-    set pins, 0b0101
+    set pins, 0b1100
     irq wait 3
     set pins, 0b0110
+    irq wait 3
+    set pins, 0b0011
     jmp tras
 
 % c-sdk {
@@ -70,6 +68,7 @@ static inline void stepper_step_program_init(PIO pio, uint sm, uint offset, uint
     pio_sm_set_consecutive_pindirs(pio, sm, pin, 4, true);
 
     // começa execução
+    pio_sm_exec(pio, sm, pio_encode_jmp(start));
     pio_sm_set_enabled(pio, sm, true);
 }
 %}
