@@ -3,6 +3,7 @@ from cadquery import exporters
 from cadquery.selectors import BoxSelector
 from motor_2 import motor_2, motor_2_dim
 from testes_acoplamento_motor_2 import acoplamento_motor_2
+import math
 
 raio_arredondamentos = 1.6 / 2
 
@@ -80,7 +81,7 @@ raio_cabeca= 8 / 2
 altura_cabeca = 5
 w_sup = w_sup.cut(cq.Workplane('XY', origin=(0, local_ima, 0)).circle(raio_parafuso+3*diff_sup).extrude(40, both=True))
 w_sup = w_sup.cut(cq.Workplane('XY', origin=(0, local_ima, altura_braco + 2*r_sup + altura_cabeca)).circle(raio_cabeca+3*diff_sup).extrude(-3*altura_cabeca))
-show_object(w_sup)
+#show_object(w_sup)
 #show_object(w_sup.edges('%circle and >>Z[-5]'))#.edges('|X'))
 
 motor_2_dim = motor_2_dim()
@@ -93,22 +94,8 @@ acoplamento = acoplamento_motor_2(profundidade_acoplamento, profundidade_acoplam
 show_object(acoplamento)
 
 w = cq.Workplane('XY', origin=(0, 0, espacamento_base_acoplamento)).moveTo(-raio_base_acoplamento_2, 0).threePointArc((0, -raio_base_acoplamento_2), (raio_base_acoplamento_2, 0))
-w = w.lineTo(largura_braco / 2, largura_braco).lineTo(largura_braco / 2, comprimento_braco - comprimento_prender_ima)
-p = comprimento_braco - comprimento_prender_ima
-o = 1
-for i in range(comprimento_prender_ima // (2*raio_ondulacao)):
-    w = w.threePointArc((largura_braco / 2 + raio_ondulacao*o - raio_arredondamentos, p + (raio_ondulacao-o*raio_arredondamentos)), (largura_braco / 2, p + 2*(raio_ondulacao-o*raio_arredondamentos)))
-    p += 2*(raio_ondulacao-o*raio_arredondamentos)
-    o = -1 * o
-
-w = w.threePointArc((0, comprimento_braco + largura_braco/2), (-largura_braco/2, comprimento_braco))
-
-p = comprimento_braco
-o = 1
-for i in range(comprimento_prender_ima // (2*raio_ondulacao)):
-    w = w.threePointArc((-largura_braco / 2 + raio_ondulacao*o + raio_arredondamentos, p - (raio_ondulacao+o*raio_arredondamentos)), (-largura_braco / 2, p - 2*(raio_ondulacao+o*raio_arredondamentos)))
-    p -= 2*(raio_ondulacao+o*raio_arredondamentos)
-    o = -1 * o
+w = w.lineTo(largura_braco / 2, largura_braco).lineTo(largura_braco / 2, local_ima - math.sqrt(raio_ima**2 - (largura_braco/2)**2))
+w = w.threePointArc((0, local_ima + raio_ima), (-largura_braco / 2, local_ima - math.sqrt(raio_ima**2 - (largura_braco/2)**2)))
 
 w = w.lineTo(-largura_braco / 2, largura_braco).lineTo(-raio_base_acoplamento_2, 0)
 w = w.close().extrude(altura_braco)
@@ -118,6 +105,8 @@ w = w.union(w.shell(raio_arredondamentos)).clean()#w.faces('|Z').edges().fillet(
 w = w.union(acoplamento.full).clean()
 w = w.cut(acoplamento.neg).clean()
 
+w = w.cut(cq.Workplane('XY', origin=(0, local_ima, 0)).circle(raio_parafuso+3*diff_sup).extrude(40, both=True))
+w = w.cut(cq.Workplane('XY', origin=(0, local_ima, altura_braco + 2*raio_arredondamentos - 2)).circle(raio_cabeca+3*diff_sup).extrude(-3*altura_cabeca))
 #point = w.edges('>Z and %circle').vals()[0].arcCenter()
 
 #w = w.edges(BoxSelector((point.x+profundidade_base_acoplamento,point.y+profundidade_base_acoplamento,point.z+profundidade_base_acoplamento), (point.x-profundidade_base_acoplamento,point.y-profundidade_base_acoplamento,point.z-profundidade_base_acoplamento)))
