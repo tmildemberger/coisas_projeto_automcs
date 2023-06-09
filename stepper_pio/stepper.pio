@@ -143,8 +143,8 @@ static inline void stepper_outro_program_init(PIO pio, uint sm, uint offset, uin
     // configura autopull
     sm_config_set_out_shift(&c, true, true, 32);
 
-    // configura para 8 kHz
-    float div = clock_get_hz(clk_sys) / 8000.0f;
+    // configura para 16 kHz
+    float div = clock_get_hz(clk_sys) / 16000.0f;
     sm_config_set_clkdiv(&c, div);
 
 
