@@ -74,8 +74,6 @@ int main(void) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// copiado do .ino
-
 typedef struct solucoes {
     float theta1_sol1;
     float theta2_sol1;
@@ -126,13 +124,13 @@ Solucoes duas_solucoes(float x, float y) {
 }
 
 const float CASA = 2.4f;
-const int CASA_MM = 24;
+const int CASA_MMM = 24/2;
 const int LARGURA = 12;
 const int ALTURA = 8;
 const float canto_inf_esquerdo_x = -(((float) LARGURA)*CASA/2);
 const float canto_inf_esquerdo_y = -(((float) ALTURA)*CASA/2);
-const int canto_inf_esquerdo_x_mm = -(LARGURA*CASA_MM/2);
-const int canto_inf_esquerdo_y_mm = -(ALTURA*CASA_MM/2);
+const int canto_inf_esquerdo_x_mmm = -(LARGURA*CASA_MMM/2);
+const int canto_inf_esquerdo_y_mmm = -(ALTURA*CASA_MMM/2);
 
 const float graus_evitar = 45;
 
@@ -153,12 +151,12 @@ float transforma_y(int pos_y) {
     return canto_inf_esquerdo_y + CASA/2 + ((float) pos_y)*CASA;
 }
 
-int transforma_x_mm(int pos_x) {
-    return canto_inf_esquerdo_x_mm + CASA_MM/2 + pos_x*CASA_MM;
+int transforma_x_mmm(int pos_x) {
+    return canto_inf_esquerdo_x_mmm + CASA_MMM/2 + pos_x*CASA_MMM;
 }
 
-int transforma_y_mm(int pos_y) {
-    return canto_inf_esquerdo_y_mm + CASA_MM/2 + pos_y*CASA_MM;
+int transforma_y_mmm(int pos_y) {
+    return canto_inf_esquerdo_y_mmm + CASA_MMM/2 + pos_y*CASA_MMM;
 }
 
 // https://stackoverflow.com/questions/1878907/how-can-i-find-the-smallest-difference-between-two-angles-around-a-point
@@ -221,7 +219,7 @@ Solucao escolhe_melhor(Solucoes sols, float theta1_atual, float theta2_atual, in
             };
         }
     } else { // escolhe pelo menor diff somado
-        printf("teste5\r\n");
+        // printf("teste5\r\n");
         float sol1_t1_diff = diff_angulos(sols.theta1_sol1, entre_180_e_180(theta1_atual));
         float sol2_t1_diff = diff_angulos(sols.theta1_sol2, entre_180_e_180(theta1_atual));
         if ((fabsf(sol1_diff) + fabsf(sol1_t1_diff)) <= (fabsf(sol2_diff) + fabsf(sol2_t1_diff))) {
@@ -246,7 +244,7 @@ float theta1 = 0.0;
 // angulo motor pequeno
 float theta2 = 0.0;
 
-int x_atual = 89*2;
+int x_atual = 89;
 int y_atual = 0;
 
 // posicao atual
@@ -263,11 +261,11 @@ int posicao_motor_grande(float angulo) {
     } else {
         pos = angulo * passos_por_volta / 360.0f;
     }
-    return (int) roundf(pos);
+    return (int) truncf(pos);
 }
 
 int angulo_para_passo_motor_pequeno(float angulo) {
-    return (int) roundf(angulo * 2048.0f / 360.0f);
+    return (int) truncf(angulo * 2048.0f / 360.0f);
 }
 
 volatile bool chegou = false;
@@ -312,7 +310,7 @@ int le_numero(void) {
 //     }
     
 // }
-#define SZ 1024
+#define SZ 4096
 class Linha {
 public:
     int vec[SZ];
@@ -347,12 +345,12 @@ public:
         // }
         // printf("fim_debug\r\n");
         for (int i = 0; i < n; i += 2) {
-            Solucoes sols = duas_solucoes((float)vec[i_pronto + i]/10.0f, (float)vec[i_pronto + i + 1]/10.0f);
+            Solucoes sols = duas_solucoes((float)vec[i_pronto + i]/5.0f, (float)vec[i_pronto + i + 1]/5.0f);
             // printf("teste3\r\n");fflush(stdout);
             Solucao sol = escolhe_melhor(sols, t1, t2, 1);
-            printf("teste6\r\n");
+            // printf("teste6\r\n");
             angs[i_pronto + i] = t1 = sol.theta1;
-            angs[i_pronto + i + 1] = t2 = sol.theta2;
+            angs[i_pronto + i + 1] = t2 = t2 + sol.estimated_theta2_diff;
         }
         i_pronto += n;
     }
@@ -374,6 +372,11 @@ public:
         (*p_x) = vec[idx];
         (*p_y) = vec[idx + 1];
     }
+    void fim() {
+        for (int i = 0; i < max; i += 2) {
+            printf("ang[%d] -> %f; %f;\r\n", i/2, angs[i], angs[i+1]);
+        }
+    }
 };
 
 void manda_motores_rodarem(int dir_grande, uint32_t n_passos_grande, int dir_pequeno, uint32_t n_passos_pequeno);
@@ -384,9 +387,9 @@ void anda_em_linha_reta(int x, int y) {
     int tam = bresenham(x_atual, y_atual, x, y, vec, SZ);
     printf("Numero de pontos pelo caminho: %d\r\n", tam);
     Linha l {vec, tam, theta1, theta2};
-    printf("teste1\r\n");
-    l.calcula(8);
-    printf("teste2\r\n");
+    // printf("teste1\r\n");
+    l.calcula(tam + 20);
+    // printf("teste2\r\n");
 
     int max = tam / 2;
     for (int i = 1; i < max; ++i) {
@@ -399,6 +402,7 @@ void anda_em_linha_reta(int x, int y) {
         int posicao_grande = posicao_motor_grande(sol_theta1);
 
         int dist_grande = posicao_grande - posicao_grande_atual;
+        vec[i] = dist_grande;
         int dist_pequeno = angulo_para_passo_motor_pequeno(sol_theta2 - theta2);
 
         int dir_grande = (dist_grande > 0) ? 1 : 0;
@@ -408,12 +412,12 @@ void anda_em_linha_reta(int x, int y) {
 
         manda_motores_rodarem(dir_grande, n_passos_grande, dir_pequeno, n_passos_pequeno);
 
-        int vezes = 2;
+        // int vezes = 2;
         while (!chegou) {
-            if (vezes > 0) {
-                --vezes;
-                l.calcula(2);
-            }
+            // if (vezes > 0) {
+            //     --vezes;
+            //     l.calcula(2);
+            // }
         }
         // printf("Movimento terminou\r\n");
 
@@ -423,9 +427,18 @@ void anda_em_linha_reta(int x, int y) {
         l.le_pos(i, &x_atual, &y_atual);
 
         posicao_grande_atual = posicao_grande;
-        sleep_ms(1);
+        sleep_ms(20);
     }
+    l.fim();
+    printf(" -- passos:\r\n");
+    int total = 0;
+    for (int i = 1; i < max; ++i) {
+        printf(" -- * segmento %d deu passo %d\r\n", i, vec[i]);
+        total += vec[i];
+    }
+    printf(" -- total: %d\r\n", total);
     printf("Movimento terminou\r\n");
+    printf("Angulos atuais devem ser %f, %f;\r\n", theta1, theta2);
 }
 
 void manda_motores_rodarem(int dir_grande, uint32_t n_passos_grande, int dir_pequeno, uint32_t n_passos_pequeno) {
@@ -521,8 +534,8 @@ void ir_para_posicao(int pos_x, int pos_y) {
     theta1 = sol.theta1;
     theta2 += sol.estimated_theta2_diff;
 
-    x_atual = transforma_x_mm(pos_x);
-    y_atual = transforma_y_mm(pos_y);
+    x_atual = transforma_x_mmm(pos_x);
+    y_atual = transforma_y_mmm(pos_y);
 
     posicao_grande_atual = posicao_grande;
 }
@@ -553,8 +566,7 @@ void loop(void) {
         pos_y = (pos_y >= ALTURA) ? ALTURA - 1 : pos_y;
 
         ir_para_posicao(pos_x, pos_y);
-    } else {
-        // com cmd == 0 ou qualquer outro
+    } else if (cmd == 4) {
         printf("Esperando posição final linha reta:\r\n");
         int pos_x = le_numero();
         int pos_y = le_numero();
@@ -562,7 +574,42 @@ void loop(void) {
         pos_y = (pos_y >= ALTURA) ? ALTURA - 1 : pos_y;
 
 
-        anda_em_linha_reta(transforma_x_mm(pos_x), transforma_y_mm(pos_y));
+        anda_em_linha_reta(transforma_x_mmm(pos_x), transforma_y_mmm(pos_y));
+    } else if (cmd == 5) {
+        printf("Esperando delta ângulos:\r\n");
+        int d_1 = le_numero();
+        int d_2 = le_numero();
+        float diff_t1 = entre_180_e_180((float) d_1);
+        float diff_t2 = entre_180_e_180((float) d_2);
+
+        printf("Angulos finais %f, %f;\r\n", theta1 + diff_t1, theta2 + diff_t2);
+    
+        int posicao_grande = posicao_motor_grande(theta1 + diff_t1);
+        printf("Posição final grande: %d\r\n", posicao_grande);
+
+        int dist_grande = posicao_grande - posicao_grande_atual;
+        printf("Passos motor grande: %d\r\n", dist_grande);
+        int dist_pequeno = angulo_para_passo_motor_pequeno(diff_t2);
+
+        int dir_grande = (dist_grande > 0) ? 1 : 0;
+        int dir_pequeno = (dist_pequeno > 0) ? 1 : 0;
+        uint32_t n_passos_grande = (uint32_t) abs(dist_grande);
+        uint32_t n_passos_pequeno = (uint32_t) abs(dist_pequeno);
+
+        roda_motores_e_espera(dir_grande, n_passos_grande, dir_pequeno, n_passos_pequeno);
+
+        printf("Movimento terminou\r\n");
+
+        theta1 += diff_t1;
+        theta2 += diff_t2;
+
+        // x_atual = transforma_x_mmm(pos_x);
+        // y_atual = transforma_y_mmm(pos_y);
+
+        posicao_grande_atual = posicao_grande;
+
+    } else {
+        printf("Comando não identificado;\r\n");
     }
 
     ++i;

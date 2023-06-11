@@ -24,7 +24,6 @@ tras:
     set pins, 0b0110
     irq wait 3
     set pins, 0b0011
-    jmp tras
 
 % c-sdk {
 
@@ -120,6 +119,7 @@ static inline void stepper_count_program_init(PIO pio, uint sm, uint offset) {
 
     ; lê n de passos no 'y'
     out y, 31
+    jmp !y acabou
 
 nao_acabou:
     set pins, 1
@@ -127,8 +127,10 @@ nao_acabou:
     set x, 19
 loop_x:
     jmp x-- loop_x [31]
+checa:
     jmp y-- nao_acabou [24]
 
+acabou:
     ; acabou, espera o outro motor ter acabado, e então avisa CPU
     wait 1 irq 2
     irq 0
@@ -143,8 +145,8 @@ static inline void stepper_outro_program_init(PIO pio, uint sm, uint offset, uin
     // configura autopull
     sm_config_set_out_shift(&c, true, true, 32);
 
-    // configura para 16 kHz
-    float div = clock_get_hz(clk_sys) / 16000.0f;
+    // configura para 12.5 kHz
+    float div = clock_get_hz(clk_sys) / 12500.0f;
     sm_config_set_clkdiv(&c, div);
 
 
