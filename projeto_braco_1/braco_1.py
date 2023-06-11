@@ -1,11 +1,12 @@
 import cadquery as cq
 import math
 from cadquery import exporters
+from cadquery import selectors
 from motor_2 import motor_2, motor_2_dim
 import teardrop  # Adds the teardrop function to cadquery.Workplane
 
 # em milímetros
-comprimento_braco = 81
+comprimento_braco = 62
 largura_braco = 12
 altura_braco = 10
 profundidade_acoplamento = 7.2
@@ -80,10 +81,22 @@ w = w.edges('|Y').fillet(raio_arrendondamentos)
 
 w_motor = motor_2((comprimento_braco, 0.0, 0.0), rotate=True, rotation_axis=((0.0, -1.0, 0.0), (0.0, 1.0, 0.0)), rotation=180)
 
-from testes_acoplamento import acoplamento
-obj_acoplamento = acoplamento(profundidade_acoplamento, altura_braco, raio_base_acoplamento, raio_arrendondamentos)
-neg = cq.Workplane('XY').circle(obj_acoplamento[1] - raio_arrendondamentos).extrude(altura_braco)
-w = w.moveTo(0, 0).cut(neg).union(obj_acoplamento[0])
+#from testes_acoplamento import acoplamento
+#obj_acoplamento = acoplamento(profundidade_acoplamento, altura_braco, raio_base_acoplamento, raio_arrendondamentos)
+#neg = cq.Workplane('XY').circle(obj_acoplamento[1] - raio_arrendondamentos).extrude(altura_braco)
+w = w.moveTo(0, 0).union(cq.Workplane('XY').circle(raio_base_acoplamento).extrude(altura_braco).edges().fillet(raio_arrendondamentos))
+#.cut(neg).union(obj_acoplamento[0])
+#show_object(obj_acoplamento[0])
+w = w.union(cq.Workplane('XY', origin=(0, 0, altura_braco/2)).circle(7).extrude((altura_braco+17)/2).edges().fillet(raio_arrendondamentos))
+#.union(cq.Workplane('XY', origin=(0, 0, altura_braco)).circle(raio_base_acoplamento-raio_arrendondamentos).extrude(-2))
+
+#show_object(w.edges('%circle and >>Z[-5]'))
+w = w.edges(selectors.NearestToPointSelector((0,0,altura_braco))).fillet(2*raio_arrendondamentos)
+shaft = cq.Workplane('XY', origin=(0, 0, altura_braco/2)).circle(2.5).extrude((altura_braco+17)/2, both=True).cut(cq.Workplane('XY').moveTo(2.5, 0).box(1, 10, 50, (True, True, True)))
+w = w.cut(shaft)
+#show_object(shaft)
+
+#show_object(w.edges('%circle and <X'))
 
 raio_menor_furos = 3 / 2
 raio_maior_furos = 5 / 2
