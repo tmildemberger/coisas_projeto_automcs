@@ -3,14 +3,27 @@
 #include <cstring>
 #include "pico/stdlib.h"
 #include "hardware/pio.h"
+#include "hardware/uart.h"
 // criado a partir do .pio:
 #include "stepper.pio.h"
+
+// biblioteca do A*, usado para calcular o caminho da peça
+#include "astar-lib/AStar.hpp"
 
 #define _USE_MATH_DEFINES
 #include <cmath>
 
-void loop(void);
-void chegou_int(void);
+// se for 0, se comunica normalmente com o computador pelo usb
+#define ZERO_UART 1
+
+#define UART_ID uart0
+#define BAUD_RATE 115200
+
+#define UART_TX_PIN 0
+#define UART_RX_PIN 1
+
+void loop();
+void chegou_int();
 
 PIO pio = pio0;
 uint sm_step = 0;
@@ -22,8 +35,9 @@ const uint led_pin = PICO_DEFAULT_LED_PIN;
 
 // controle do ímã pelo pino 15
 const uint magnet_pin = 15;
+bool ima_ligado = false;
 
-int main(void) {
+int main() {
     const uint step_pin = 6;
     const uint dir_pin = 7;
     
@@ -37,10 +51,13 @@ int main(void) {
     gpio_set_dir(magnet_pin, GPIO_OUT);
     gpio_put(magnet_pin, 0);
     
-    // inicializa porta serial selecionada no CMakeLists.txt
-    stdio_init_all();
+    // inicializa uart para comunicação com o zero
+    uart_init(UART_ID, BAUD_RATE);
+    gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
+    gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
 
-    sleep_ms(1000);
+    // inicializa porta USB para ser usada com o stdio
+    stdio_init_all();
     
     printf("Começa configuração\r\n");
 
@@ -64,8 +81,6 @@ int main(void) {
     irq_set_enabled(PIO0_IRQ_0, true);
 
     printf("Fim da configuração\r\n");
-    // espera ligar na tomada
-    sleep_ms(8000);
 
     while (1) {
         loop();
@@ -87,34 +102,33 @@ typedef struct solucao {
     float estimated_theta2_diff;
 } Solucao;
 
-#define A (8.9f)
-#define A2 (76.21f)
-#define A22 (158.42f)
+#define A (7.0f)
+#define A2 (49.0f)
+#define A22 (98.0f)
 
 float entre_180_e_180(float f) {
-    // printf("nao\r\n");
     while (f > 180.0f) {
-        // printf("pode\r\n");
         f -= 360.0f;
     }
     while (f <= -180.0f) {
-        // printf("ser\r\n");
         f += 360.0f;
     }
-    // printf("cara\r\n");
     return f;
 }
 
 Solucoes duas_solucoes(float x, float y) {
-    // printf("teste_eoq\r\n");
+    if (x == 0 && y == 0) {
+        // nesse caso haveriam infinitas soluções, em particular essas duas
+        return (Solucoes) {
+            135,
+            -180,
+            45,
+            180
+        };
+    }
     float alpha1 = 180.f*atan2f(y, x)/M_PI;
     float alpha2 = 180.f*acosf( sqrtf(x*x+y*y) / (2*A) )/M_PI;
     float alpha3 = 180.f*acosf( (A22 - x*x - y*y) / (A22) )/M_PI;
-    // printf("teste_claro\r\n");
-    // printf("x, y = %d, %d\r\n", x, y);
-    // printf("a1 = %f\r\n", (double)alpha1);
-    // printf("a2 = %f\r\n", (double)alpha2);
-    // printf("a3 = %f\r\n", (double)alpha3);
     return (Solucoes) {
         entre_180_e_180(alpha1 + alpha2),
         entre_180_e_180(alpha3 - 180),
@@ -133,13 +147,6 @@ const int canto_inf_esquerdo_x_mmm = -(LARGURA*CASA_MMM/2);
 const int canto_inf_esquerdo_y_mmm = -(ALTURA*CASA_MMM/2);
 
 const float graus_evitar = 45;
-
-const int posicoes[8] = {
-    3, 1,  // x = 3, y = 1  => (-7.5, -7.5) cm
-    11, 7, // x = 11, y = 7 => (16.5, 10.5) cm
-    1, 4,  // x = 1, y = 4  => (-13.5, 1.5) cm
-    6, 2,  // x = 6, y = 0  => (1.5, -10.5) cm
-};
 
 int bresenham(int x1, int y1, int const x2, int const y2, int *vec, int max);
 
@@ -172,8 +179,7 @@ Solucao escolhe_melhor(Solucoes sols, float theta1_atual, float theta2_atual, in
     bool nao_gosto_sol1 = sols.theta1_sol1 >= -90 - graus_evitar && sols.theta1_sol1 <= -90 + graus_evitar;
     bool nao_gosto_sol2 = sols.theta1_sol2 >= -90 - graus_evitar && sols.theta1_sol2 <= -90 + graus_evitar;
     if (nao_gosto_sol1 && nao_gosto_sol2) {
-        // espero que seja impossível
-        printf("teste_aaaa\r\n");
+        // impossível
         while (1);
     } else if (nao_gosto_sol1) {
         sols.theta1_sol1 = sols.theta1_sol2;
@@ -219,7 +225,6 @@ Solucao escolhe_melhor(Solucoes sols, float theta1_atual, float theta2_atual, in
             };
         }
     } else { // escolhe pelo menor diff somado
-        // printf("teste5\r\n");
         float sol1_t1_diff = diff_angulos(sols.theta1_sol1, entre_180_e_180(theta1_atual));
         float sol2_t1_diff = diff_angulos(sols.theta1_sol2, entre_180_e_180(theta1_atual));
         if ((fabsf(sol1_diff) + fabsf(sol1_t1_diff)) <= (fabsf(sol2_diff) + fabsf(sol2_t1_diff))) {
@@ -244,19 +249,16 @@ float theta1 = 0.0;
 // angulo motor pequeno
 float theta2 = 0.0;
 
-int x_atual = 89;
+int x_atual = 70;
 int y_atual = 0;
-
-// posicao atual
-int i = 0;
 
 int posicao_motor_grande(float angulo) {
     float pos = 0.0f;
-    float passos_por_volta = 96.0f * 16.0f;
+    float passos_por_volta = 200.0f * 16.0f;
     if (angulo > -180.0f && angulo <= -90 - graus_evitar) {
         pos = (angulo + 360.0f) * passos_por_volta / 360.0f;
     } else if (angulo >= -90 - graus_evitar && angulo <= -90 + graus_evitar) {
-        // erro impossível?
+        // erro impossível
         while (1);
     } else {
         pos = angulo * passos_por_volta / 360.0f;
@@ -270,7 +272,7 @@ int angulo_para_passo_motor_pequeno(float angulo) {
 
 volatile bool chegou = false;
 
-void chegou_int(void) {
+void chegou_int() {
     pio_interrupt_clear(pio, 0);
     chegou = true;
 }
@@ -280,7 +282,7 @@ void chegou_int(void) {
 
 int posicao_grande_atual = 0;
 
-int le_numero(void) {
+int le_numero() {
     const int size = 16;
     char str[size];
     int i = 0;
@@ -291,27 +293,8 @@ int le_numero(void) {
     return atoi(str);
 }
 
-// void anda_em_linha_reta(float diff_angulo_grande, float diff_angulo_pequeno) {
-//     if ((diff_angulo_grande >= 0 && diff_angulo_pequeno >= 0) ||
-//         (diff_angulo_grande <= 0 && diff_angulo_pequeno <= 0)) {
-//         // impossível andar em linha reta com essa situação
-//         // (motores têm que girar em sentidos opostos)
-//         printf("Erro lógico sentido");
-//         while (1) {
-//             ;
-//         }
-//     }
-//     if (fabsf(diff_angulo_grande) >= 180 || fabsf(diff_angulo_pequeno) >= 180) {
-//         // impossível que os arcos se cancelem se forem maiores que 180
-//         printf("Erro lógico tamanho");
-//         while (1) {
-//             ;
-//         }
-//     }
-    
-// }
-#define SZ 4096
-class Linha {
+#define SZ 16384
+class Caminho {
 public:
     int vec[SZ];
     float angs[SZ];
@@ -319,12 +302,9 @@ public:
     int max;
     float t1;
     float t2;
-    Linha(int *v, int t, float theta1, float theta2) {
+    Caminho(int *v, int t, float theta1, float theta2) {
         if (t > SZ || (t & 1)) {
-            printf("algo diferente pode acontecer");
-            while (1) {
-                ;
-            }
+            while (1);
         }
         std::memcpy(vec, v, sizeof (int) * t);
         i_pronto = 2;
@@ -334,21 +314,14 @@ public:
     }
     void calcula(int n) {
         if (n & 1) {
-            printf("eu nao sei usar minha propria função\r\n");
+            while (1);
         }
         if (i_pronto + n > max) {
             n = max - i_pronto;
         }
-        // printf("inicio_debug\r\n");
-        // for (int i = 0; i < 20; ++i) {
-        //     printf("vec[%d] = %d;\r\n", i, vec[i]);
-        // }
-        // printf("fim_debug\r\n");
         for (int i = 0; i < n; i += 2) {
             Solucoes sols = duas_solucoes((float)vec[i_pronto + i]/5.0f, (float)vec[i_pronto + i + 1]/5.0f);
-            // printf("teste3\r\n");fflush(stdout);
             Solucao sol = escolhe_melhor(sols, t1, t2, 1);
-            // printf("teste6\r\n");
             angs[i_pronto + i] = t1 = sol.theta1;
             angs[i_pronto + i + 1] = t2 = t2 + sol.estimated_theta2_diff;
         }
@@ -357,7 +330,6 @@ public:
     void le_angulo(int idx, float *th1, float *th2) {
         idx = 2 * idx;
         if (idx >= i_pronto) {
-            printf("hmm\r\n");
             while (1);
         }
         (*th1) = angs[idx];
@@ -366,34 +338,34 @@ public:
     void le_pos(int idx, int *p_x, int *p_y) {
         idx = 2 * idx;
         if (idx >= i_pronto) {
-            printf("hmm\r\n");
             while (1);
         }
         (*p_x) = vec[idx];
         (*p_y) = vec[idx + 1];
     }
-    void fim() {
-        for (int i = 0; i < max; i += 2) {
-            printf("ang[%d] -> %f; %f;\r\n", i/2, angs[i], angs[i+1]);
-        }
-    }
 };
 
 void manda_motores_rodarem(int dir_grande, uint32_t n_passos_grande, int dir_pequeno, uint32_t n_passos_pequeno);
+void roda_motores_e_espera(int dir_grande, uint32_t n_passos_grande, int dir_pequeno, uint32_t n_passos_pequeno);
+void anda_no_caminho_dado(Caminho& l, int tam);
 
 void anda_em_linha_reta(int x, int y) {
-    // const int sz = 1024;
     int vec[SZ];
     int tam = bresenham(x_atual, y_atual, x, y, vec, SZ);
-    printf("Numero de pontos pelo caminho: %d\r\n", tam);
-    Linha l {vec, tam, theta1, theta2};
-    // printf("teste1\r\n");
+    // printf("Numero de pontos pelo caminho: %d\r\n", tam);
+    Caminho l {vec, tam, theta1, theta2};
+    anda_no_caminho_dado(l, tam);
+    
+    // printf("Movimento terminou\r\n");
+    // printf("Angulos atuais devem ser %f, %f;\r\n", theta1, theta2);
+}
+
+
+void anda_no_caminho_dado(Caminho& l, int tam) {
     l.calcula(tam + 20);
-    // printf("teste2\r\n");
 
     int max = tam / 2;
     for (int i = 1; i < max; ++i) {
-        // if (i == 2) printf("teste7\r\n");
         float sol_theta1 = 0;
         float sol_theta2 = 0;
 
@@ -401,25 +373,72 @@ void anda_em_linha_reta(int x, int y) {
 
         int posicao_grande = posicao_motor_grande(sol_theta1);
 
-        int dist_grande = posicao_grande - posicao_grande_atual;
-        vec[i] = dist_grande;
-        int dist_pequeno = angulo_para_passo_motor_pequeno(sol_theta2 - theta2);
+        // vê se teve que desviar de zona proibida
+        if (fabsf(sol_theta1 - theta1) > 180 || fabsf(sol_theta2 - theta2) > 180) {
+            // se é o caso, para tentar evitar de bater nas bordas, leva
+            // ima para o centro, gira motor grande, e depois posiciona motor pequeno
 
-        int dir_grande = (dist_grande > 0) ? 1 : 0;
-        int dir_pequeno = (dist_pequeno > 0) ? 1 : 0;
-        uint32_t n_passos_grande = (uint32_t) abs(dist_grande);
-        uint32_t n_passos_pequeno = (uint32_t) abs(dist_pequeno);
+            // tudo isso com ima desligado, caso esteja ligado
+            if (ima_ligado) {
+                gpio_put(magnet_pin, 0);
+                // espera um pouco para desligar
+                sleep_ms(800);
+            }
 
-        manda_motores_rodarem(dir_grande, n_passos_grande, dir_pequeno, n_passos_pequeno);
+            float diff_centro_pequeno = 0;
+            float aux_theta1 = entre_180_e_180(theta1);
+            if (aux_theta1 >= 0) {
+                diff_centro_pequeno = (theta2 <= 90 - aux_theta1) ? (-180 - theta2) : (180 - theta2);
+            } else {
+                diff_centro_pequeno = (theta2 <= -90 - aux_theta1) ? (-180 - theta2) : (180 - theta2);
+            }
 
-        // int vezes = 2;
-        while (!chegou) {
-            // if (vezes > 0) {
-            //     --vezes;
-            //     l.calcula(2);
-            // }
+            int dir_centro_pequeno = (diff_centro_pequeno > 0) ? 1 : 0;
+            uint32_t passos_centro_pequeno = (uint32_t) abs(diff_centro_pequeno);
+
+            roda_motores_e_espera(1, 0, dir_centro_pequeno, passos_centro_pequeno);
+            sleep_ms(20);
+
+            // agora roda motor grande
+            int dist_grande = posicao_grande - posicao_grande_atual;
+            int dir_grande = (dist_grande > 0) ? 1 : 0;
+            uint32_t n_passos_grande = (uint32_t) abs(dist_grande);
+
+            roda_motores_e_espera(dir_grande, n_passos_grande, dir_centro_pequeno, 0);
+            sleep_ms(20);
+
+            // termina rodando motor menor
+            float aux_theta2 = diff_centro_pequeno + theta2;
+            int dist_pequeno = angulo_para_passo_motor_pequeno(sol_theta2 - aux_theta2);
+            int dir_pequeno = (dist_pequeno > 0) ? 1 : 0;
+            uint32_t n_passos_pequeno = (uint32_t) abs(dist_pequeno);
+
+            roda_motores_e_espera(dir_grande, 0, dir_pequeno, n_passos_pequeno);
+            sleep_ms(20);
+
+            if (ima_ligado) {
+                gpio_put(magnet_pin, 1);
+                // espera um pouco para ligar
+                sleep_ms(1200);
+            }
+        } else {
+
+            int dist_grande = posicao_grande - posicao_grande_atual;
+            int dist_pequeno = angulo_para_passo_motor_pequeno(sol_theta2 - theta2);
+
+            int dir_grande = (dist_grande > 0) ? 1 : 0;
+            int dir_pequeno = (dist_pequeno > 0) ? 1 : 0;
+            uint32_t n_passos_grande = (uint32_t) abs(dist_grande);
+            uint32_t n_passos_pequeno = (uint32_t) abs(dist_pequeno);
+
+            manda_motores_rodarem(dir_grande, n_passos_grande, dir_pequeno, n_passos_pequeno);
+
+            while (!chegou) {
+                ;
+            }
+            sleep_ms(20);
         }
-        // printf("Movimento terminou\r\n");
+
 
         theta1 = sol_theta1;
         theta2 = sol_theta2;
@@ -427,25 +446,13 @@ void anda_em_linha_reta(int x, int y) {
         l.le_pos(i, &x_atual, &y_atual);
 
         posicao_grande_atual = posicao_grande;
-        sleep_ms(20);
     }
-    l.fim();
-    printf(" -- passos:\r\n");
-    int total = 0;
-    for (int i = 1; i < max; ++i) {
-        printf(" -- * segmento %d deu passo %d\r\n", i, vec[i]);
-        total += vec[i];
-    }
-    printf(" -- total: %d\r\n", total);
-    printf("Movimento terminou\r\n");
-    printf("Angulos atuais devem ser %f, %f;\r\n", theta1, theta2);
 }
 
 void manda_motores_rodarem(int dir_grande, uint32_t n_passos_grande, int dir_pequeno, uint32_t n_passos_pequeno) {
     // prepara para rodarem
     uint8_t pc = pio_sm_get_pc(pio, sm_step);
     
-    // printf("PC e dir: %d, %d\r\n", pc, dir_pequeno);
     if (pc < 8 && dir_pequeno == 0) {
         uint novo_pc = 0;
         // vai trocar de dir = 1 para 0
@@ -540,23 +547,24 @@ void ir_para_posicao(int pos_x, int pos_y) {
     posicao_grande_atual = posicao_grande;
 }
 
-void loop(void) {
-    if (i % 2) {
-        gpio_put(led_pin, 1);
-    } else {
-        gpio_put(led_pin, 0);
-    }
+int vec[16384];
 
+void loop() {
+
+#if ZERO_UART == 0
     printf("Esperando comando:\r\n");
     int cmd = le_numero();
+    printf("Cmd %d:\r\n", cmd);
     if (cmd == 1) {
         // ligar ima
         printf("Comando ligar ímã\r\n");
         gpio_put(magnet_pin, 1);
+        ima_ligado = true;
     } else if (cmd == 2) {
         // desligar ima
         printf("Comando desligar ímã\r\n");
         gpio_put(magnet_pin, 0);
+        ima_ligado = false;
     } else if (cmd == 3) {
         // comando ir para posição
         printf("Esperando entrada de posição:\r\n");
@@ -607,14 +615,125 @@ void loop(void) {
         // y_atual = transforma_y_mmm(pos_y);
 
         posicao_grande_atual = posicao_grande;
-
     } else {
         printf("Comando não identificado;\r\n");
     }
 
-    ++i;
-
     sleep_ms(4000);
+#else
+    uint8_t buf[512];
+    // uma mensagem enviada pelo Raspberry Pi Zero tem tamanho 64+1+2+2+2+2+2+2 = 77
+    // composto por:
+    // 64 bytes '0' ou '1' indicando se a posição possui peça ou não
+    // 1 separador '|'
+    // 1 byte + separador '|' para coordenada x da peça a ser movida (entre 0 e 11)
+    // 1 byte + separador '|' para coordenada y da peça a ser movida (entre 0 e 7)
+    // 1 byte + separador '|' para coordenada x da peça a ser movida (em mm, entre 0 e 255)
+    // 1 byte + separador '|' para coordenada y da peça a ser movida (em mm, entre 0 e 255)
+    // 1 byte + separador '|' para coordenada x do destino da peça (entre 0 e 11)
+    // 1 byte + separador '|' para coordenada y do destino da peça (entre 0 e 7)
+    uart_read_blocking(UART_ID, buf, 77);
+    // roque acontece em 3 momentos:
+    // mandam tirar torre
+    // mandam mover rei
+    // mandam recolocar torre
+
+    AStar::Generator generator;
+    generator.setWorldSize({12, 10});
+    generator.setHeuristic(AStar::Heuristic::euclidean);
+    generator.setDiagonalMovement(true);
+
+    // adiciona "paredes" onde há peças
+    for (int i = 0; i < 64; ++i) {
+        if (buf[i] == 1) {
+            generator.addCollision({2+(i%8), 1+(i/8)});
+        }
+    }
+
+    // adiciona também paredes padrão (casas fora de alcance ou inativas)
+    for (int i = 0; i < 10; ++i) {
+        generator.addCollision({0, i});
+        generator.addCollision({11, i});
+        if (i <= 1 || i >= 8) {
+            generator.addCollision({1, i});
+            generator.addCollision({10, i});
+        }
+        if (i == 0 || i == 9) {
+            generator.addCollision({2, i});
+            generator.addCollision({9, i});
+        }
+    }
+
+    const uint8_t st_x = buf[65];
+    const uint8_t st_y = buf[67];
+    const uint8_t st_x_mmm = buf[69] / 2;
+    const uint8_t st_y_mmm = buf[71] / 2;
+    const uint8_t ed_x = buf[73];
+    const uint8_t ed_y = buf[75];
+
+    auto path = generator.findPath({st_x, st_y}, {ed_x, ed_y});
+
+    if (path.size() == 0) {
+        if (st_x != ed_x && st_y != ed_y) {
+            // não há caminho, tem que tirar algum da frente
+            printf("Não encontrou caminho;\r\n");
+            while (1);
+        } else {
+            // movimento para a mesma coordenada
+            // pode ajustar a peça, ou fazer nada
+        }
+    } else {
+        // monta caminho:
+        // utiliza o "int vec[16384];"
+
+        // primeiro vai com ima desligado até inicio
+        if (ima_ligado) {
+            gpio_put(magnet_pin, 0);
+            ima_ligado = false;
+            sleep_ms(500);
+        }
+
+        int ix = 0;
+        anda_em_linha_reta(st_x_mmm, st_y_mmm);
+
+        // liga ima e calcula
+        gpio_put(magnet_pin, 1);
+        ima_ligado = true;
+
+        int calc_x_atual = st_x_mmm;
+        int calc_y_atual = st_y_mmm;
+        for (auto& coordinate : path) {
+            int proximo_x = transforma_x_mmm(coordinate.x);
+            int proximo_y = transforma_y_mmm(coordinate.y);
+            int tam = bresenham(calc_x_atual,
+                                calc_y_atual,
+                                proximo_x,
+                                proximo_y,
+                                vec + ix,
+                                16384 - ix);
+            if (tam + ix >= 16384 - 2) {
+                // acabou espaço no vetor...
+                printf("Sem espaço;\r\n");
+                while (1);
+            }
+            ix += tam;
+            calc_x_atual = proximo_x;
+            calc_y_atual = proximo_y;
+        }
+        Caminho l {vec, ix, theta1, theta2};
+
+        // dorme um pouco pro ima ligar
+        sleep_ms(700);
+
+        // anda e depois desliga ima
+        anda_no_caminho_dado(l, ix);
+
+        gpio_put(magnet_pin, 0);
+        ima_ligado = false;
+        sleep_ms(500);
+    }
+
+#endif
 }
 
 int bresenham(int x1, int y1, int const x2, int const y2, int *vec, int max) {

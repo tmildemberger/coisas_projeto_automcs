@@ -78,12 +78,13 @@ static inline void stepper_step_program_init(PIO pio, uint sm, uint offset, uint
 
 .wrap_target
     out x, 32
+    jmp !x stepper_finished
 
 countloop:
     wait 1 irq 3        [31]
     nop                 [31]
-    nop                 [31]
     jmp x-- countloop   [28]
+stepper_finished:
     irq wait 2
 .wrap
 
@@ -96,8 +97,8 @@ static inline void stepper_count_program_init(PIO pio, uint sm, uint offset) {
     // configura autopull
     sm_config_set_out_shift(&c, true, true, 32);
 
-    // configura para 8 kHz
-    float div = clock_get_hz(clk_sys) / 8000.0f;
+    // configura para 4 kHz
+    float div = clock_get_hz(clk_sys) / 4000.0f;
     sm_config_set_clkdiv(&c, div);
 
 

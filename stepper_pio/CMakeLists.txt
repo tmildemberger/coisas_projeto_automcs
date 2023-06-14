@@ -11,6 +11,10 @@ set(CMAKE_CXX_STANDARD 17)
 # cria subdiretório pico-sdk no projeto para bibliotecas
 pico_sdk_init()
 
+# configura biblioteca do A*
+include_directories(astar-lib)
+add_library(a-star astar-lib/AStar.cpp)
+
 add_executable(${PROJECT_NAME}
     main.cpp
 )
@@ -27,6 +31,7 @@ pico_add_extra_outputs(${PROJECT_NAME})
 target_link_libraries(${PROJECT_NAME}
     pico_stdlib
     hardware_pio
+    a-star
 )
 
 # seleciona USB ao invés de UART
