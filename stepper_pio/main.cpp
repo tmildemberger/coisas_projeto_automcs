@@ -665,11 +665,11 @@ void loop() {
     }
 
     const uint8_t st_x = buf[65];
-    const uint8_t st_y = buf[67];
+    const uint8_t st_y = buf[67] - 1;
     const uint8_t st_x_mmm = buf[69] / 2;
     const uint8_t st_y_mmm = buf[71] / 2;
     const uint8_t ed_x = buf[73];
-    const uint8_t ed_y = buf[75];
+    const uint8_t ed_y = buf[75] - 1;
 
     auto path = generator.findPath({st_x, st_y}, {ed_x, ed_y});
 
